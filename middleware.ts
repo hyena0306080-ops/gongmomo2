@@ -6,9 +6,9 @@ export function middleware(request: NextRequest) {
 
   // 관리자 페이지 보호
   if (pathname.startsWith("/admin")) {
-    const isLoggedIn = request.cookies.get("admin_auth")?.value;
+    const auth = request.cookies.get("admin_auth")?.value;
 
-    if (isLoggedIn !== "true") {
+    if (auth !== "true") {
       return NextResponse.redirect(
         new URL("/admin-login", request.url)
       );
