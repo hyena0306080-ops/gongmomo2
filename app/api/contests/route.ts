@@ -1,56 +1,71 @@
 import { NextResponse } from "next/server";
 import { kv } from "@vercel/kv";
 
-const KEY = "contests";
+const CONTESTS_KEY = "contests";
 
 /**
- * 공모전 목록 조회 (학생/관리자 공용)
+ * 공모전 목록 조회
  */
 export async function GET() {
-  const contests = (await kv.get<any[]>(KEY)) || [];
-  return NextResponse.json(contests);
+  try {
+    const contests = await kv.get(CONTESTS_KEY);
+
+    // 🔥 무조건 배열만 반환
+    if (!Array.isArray(contests)) {
+      return NextResponse.json([]);
+    }
+
+    return NextResponse.json(contests);
+  } catch (e) {
+    console.error("GET /api/contests error:", e);
+    return NextResponse.json([], { status: 200 });
+  }
 }
 
 /**
- * 공모전 추가 (관리자)
+ * 공모전 추가
  */
 export async function POST(req: Request) {
-  const body = await req.json();
-  const { title, period } = body;
+  try {
+    const body = await req.json();
+    const contests = (await kv.get(CONTESTS_KEY)) as any[] | null;
 
-  if (!title || !period) {
-    return NextResponse.json({ error: "invalid data" }, { status: 400 });
+    const newContest = {
+      id: Date.now(),
+      ...body,
+    };
+
+    const next = Array.isArray(contests)
+      ? [...contests, newContest]
+      : [newContest];
+
+    await kv.set(CONTESTS_KEY, next);
+
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    console.error("POST /api/contests error:", e);
+    return NextResponse.json({ ok: false }, { status: 500 });
   }
-
-  const contests = (await kv.get<any[]>(KEY)) || [];
-
-  const newContest = {
-    id: Date.now().toString(),
-    title,
-    period,
-  };
-
-  contests.push(newContest);
-  await kv.set(KEY, contests);
-
-  return NextResponse.json(newContest);
 }
 
 /**
- * 공모전 삭제 (관리자)
+ * 공모전 삭제
  */
 export async function DELETE(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const id = searchParams.get("id");
+  try {
+    const { id } = await req.json();
+    const contests = (await kv.get(CONTESTS_KEY)) as any[] | null;
 
-  if (!id) {
-    return NextResponse.json({ error: "no id" }, { status: 400 });
+    if (!Array.isArray(contests)) {
+      return NextResponse.json({ ok: true });
+    }
+
+    const next = contests.filter((c) => c.id !== id);
+    await kv.set(CONTESTS_KEY, next);
+
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    console.error("DELETE /api/contests error:", e);
+    return NextResponse.json({ ok: false }, { status: 500 });
   }
-
-  const contests = (await kv.get<any[]>(KEY)) || [];
-  const filtered = contests.filter((c) => c.id !== id);
-
-  await kv.set(KEY, filtered);
-
-  return NextResponse.json({ success: true });
 }

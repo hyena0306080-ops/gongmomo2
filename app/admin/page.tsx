@@ -2,85 +2,121 @@
 
 import { useEffect, useState } from "react";
 
-export default function AdminPage() {
-  const [contests, setContests] = useState<any[]>([]);
-  const [title, setTitle] = useState("");
-  const [period, setPeriod] = useState("");
+type Contest = {
+  id: number;
+  title: string;
+  startDate?: string;
+  endDate?: string;
+};
 
-  // 공모전 불러오기
+export default function AdminPage() {
+  const [contests, setContests] = useState<Contest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  // 🔹 공모전 목록 불러오기
   const fetchContests = async () => {
-    const res = await fetch("/api/contests");
-    const data = await res.json();
-    setContests(data);
+    try {
+      const res = await fetch("/api/contests");
+
+      if (!res.ok) {
+        throw new Error("공모전 불러오기 실패");
+      }
+
+      const data = await res.json();
+
+      // ⭐ 핵심: 배열 아닐 경우 방어
+      if (Array.isArray(data)) {
+        setContests(data);
+      } else {
+        setContests([]);
+      }
+    } catch (err) {
+      console.error(err);
+      setError("공모전 데이터를 불러오지 못했습니다.");
+      setContests([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 🔹 공모전 삭제
+  const deleteContest = async (id: number) => {
+    if (!confirm("정말 삭제하시겠습니까?")) return;
+
+    try {
+      const res = await fetch("/api/contests", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ id }),
+      });
+
+      if (!res.ok) {
+        throw new Error("삭제 실패");
+      }
+
+      // 🔥 다시 목록 불러오기
+      fetchContests();
+    } catch (err) {
+      console.error(err);
+      alert("삭제 중 오류가 발생했습니다.");
+    }
   };
 
   useEffect(() => {
     fetchContests();
   }, []);
 
-  // 공모전 추가
-  const addContest = async () => {
-    if (!title || !period) {
-      alert("공모전 제목과 모집기간을 입력하세요");
-      return;
-    }
+  if (loading) {
+    return <div style={{ padding: 20 }}>로딩 중...</div>;
+  }
 
-    await fetch("/api/contests", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, period }),
-    });
-
-    setTitle("");
-    setPeriod("");
-    fetchContests(); // 🔥 다시 불러오기
-  };
-
-  // 공모전 삭제
-  const deleteContest = async (id: number) => {
-    if (!confirm("정말 삭제하시겠습니까?")) return;
-
-    await fetch("/api/contests", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    });
-
-    fetchContests(); // 🔥 이 줄이 핵심
-  };
+  if (error) {
+    return <div style={{ padding: 20, color: "red" }}>{error}</div>;
+  }
 
   return (
-    <div style={{ padding: 40 }}>
-      <h1>🛠 공모전 관리자 페이지</h1>
+    <div style={{ padding: 20 }}>
+      <h1>관리자 페이지</h1>
 
-      <h2>공모전 추가</h2>
-      <input
-        placeholder="공모전 제목"
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-      />
-      <br />
-      <input
-        placeholder="모집 기간"
-        value={period}
-        onChange={(e) => setPeriod(e.target.value)}
-      />
-      <br />
-      <button onClick={addContest}>추가</button>
+      {contests.length === 0 && (
+        <p>등록된 공모전이 없습니다.</p>
+      )}
 
-      <hr />
+      {contests.map((contest) => (
+        <div
+          key={contest.id}
+          style={{
+            border: "1px solid #ccc",
+            padding: 12,
+            marginBottom: 10,
+          }}
+        >
+          <div><strong>{contest.title}</strong></div>
 
-      <h2>공모전 목록</h2>
-      {contests.length === 0 && <p>등록된 공모전이 없습니다.</p>}
+          {contest.startDate && contest.endDate && (
+            <div>
+              {contest.startDate} ~ {contest.endDate}
+            </div>
+          )}
 
-      <ul>
-        {contests.map((c) => (
-          <li key={c.id}>
-            {c.title} ({c.period}){" "}
-            <button onClick={() => deleteContest(c.id)}>삭제</button>
-          </li>
-        ))}
-      </ul>
+          <button
+            style={{
+              marginTop: 8,
+              background: "red",
+              color: "white",
+              border: "none",
+              padding: "6px 10px",
+              cursor: "pointer",
+            }}
+            onClick={() => deleteContest(contest.id)}
+          >
+            삭제
+          </button>
+        </div>
+      ))}
     </div>
   );
 }
