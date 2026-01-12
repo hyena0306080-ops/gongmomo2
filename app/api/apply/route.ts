@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import crypto from "crypto";
 
-const filePath = path.join(process.cwd(), "data", "applications.json");
+const filePath = path.join(process.cwd(), "data", "contests.json");
 
-function readData(): any[] {
+function readContests(): any[] {
   try {
     const raw = fs.readFileSync(filePath, "utf-8");
     const parsed = JSON.parse(raw);
@@ -15,117 +14,59 @@ function readData(): any[] {
   }
 }
 
-function writeData(data: any[]) {
+function writeContests(data: any[]) {
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf-8");
 }
 
-function hash(pw: string) {
-  return crypto.createHash("sha256").update(pw).digest("hex");
-}
-
-function withoutPassword(item: any) {
-  const { password, ...rest } = item;
-  return rest;
-}
-
-/** 전체 조회 (현황용) */
+/** 공모전 목록 조회 (학생/관리자 공용) */
 export async function GET() {
-  return NextResponse.json(readData().map(withoutPassword));
+  return NextResponse.json(readContests());
 }
 
-/** 신규 신청 */
+/** 공모전 추가 (관리자) */
 export async function POST(req: Request) {
-  const body = await req.json();
-  const data = readData();
+  try {
+    const body = await req.json();
+    const contests = readContests();
 
-  // 🔒 같은 학번 중복 신청 차단
-  if (data.some((d) => d.studentId === body.studentId)) {
+    const newContest = {
+      id: Date.now(),
+      title: body.title,
+      description: body.description,
+      startDate: body.startDate,
+      endDate: body.endDate,
+      createdAt: new Date().toISOString(),
+    };
+
+    contests.push(newContest);
+    writeContests(contests);
+
+    return NextResponse.json({ success: true });
+  } catch (e) {
     return NextResponse.json(
-      { error: "DUPLICATE_STUDENT" },
-      { status: 409 }
+      { error: "FAILED_TO_CREATE" },
+      { status: 500 }
     );
   }
-
-  data.push({
-    id: Date.now(),
-    studentId: body.studentId,
-    department: body.department,
-    name: body.name,
-    phone: body.phone,
-    awards: body.awards,
-    role: body.role,
-    selectedContests: body.selectedContests,
-    password: hash(body.password),
-    createdAt: new Date().toISOString(),
-  });
-
-  writeData(data);
-  return NextResponse.json({ success: true });
 }
 
-/** 비밀번호로 내 신청 조회 */
-export async function PUT(req: Request) {
-  const { studentId, password } = await req.json();
-  const data = readData();
-
-  const found = data.find(
-    (d) =>
-      d.studentId === studentId &&
-      d.password === hash(password)
-  );
-
-  if (!found) {
-    return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
-  }
-
-  return NextResponse.json(withoutPassword(found));
-}
-
-/** 수정 */
-export async function PATCH(req: Request) {
-  const body = await req.json();
-  const data = readData();
-
-  const idx = data.findIndex(
-    (d) =>
-      d.studentId === body.studentId &&
-      d.password === hash(body.password)
-  );
-
-  if (idx === -1) {
-    return NextResponse.json({ error: "INVALID" }, { status: 403 });
-  }
-
-  data[idx] = {
-    ...data[idx],
-    department: body.department,
-    phone: body.phone,
-    awards: body.awards,
-    role: body.role,
-    selectedContests: body.selectedContests,
-  };
-
-  writeData(data);
-  return NextResponse.json({ success: true });
-}
-
-/** 전체 취소 */
+/** 공모전 삭제 (관리자) */
 export async function DELETE(req: Request) {
-  const { studentId, password } = await req.json();
-  const data = readData();
+  try {
+    const { id } = await req.json();
+    const contests = readContests();
 
-  const filtered = data.filter(
-    (d) =>
-      !(
-        d.studentId === studentId &&
-        d.password === hash(password)
-      )
-  );
+    const filtered = contests.filter(
+      (c) => c.id !== id
+    );
 
-  if (filtered.length === data.length) {
-    return NextResponse.json({ error: "INVALID" }, { status: 403 });
+    writeContests(filtered);
+
+    return NextResponse.json({ success: true });
+  } catch (e) {
+    return NextResponse.json(
+      { error: "FAILED_TO_DELETE" },
+      { status: 500 }
+    );
   }
-
-  writeData(filtered);
-  return NextResponse.json({ success: true });
 }
