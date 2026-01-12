@@ -4,62 +4,65 @@ import { kv } from "@vercel/kv";
 const CONTESTS_KEY = "contests";
 
 /**
- * 공모전 목록 조회 (학생/관리자 공용)
+ * 공모전 목록 조회
  */
 export async function GET() {
-  const contests = (await kv.get(CONTESTS_KEY)) || [];
-  return NextResponse.json(contests);
+  try {
+    const contests = (await kv.get<any[]>(CONTESTS_KEY)) || [];
+    return NextResponse.json(contests);
+  } catch (e) {
+    return NextResponse.json({ error: "GET 실패" }, { status: 500 });
+  }
 }
 
 /**
- * 공모전 추가 (관리자)
- * body: { title: string, period: string }
+ * 공모전 추가
  */
 export async function POST(req: Request) {
   try {
-    const { title, period } = await req.json();
+    const body = await req.json();
+    const { title, period } = body;
 
     if (!title || !period) {
       return NextResponse.json(
-        { error: "제목과 모집기간은 필수입니다." },
+        { error: "title, period 필수" },
         { status: 400 }
       );
     }
 
-    const contests: any[] = (await kv.get(CONTESTS_KEY)) || [];
+    const contests = (await kv.get<any[]>(CONTESTS_KEY)) || [];
 
     const newContest = {
-      id: Date.now(), // 고유 ID
+      id: Date.now().toString(), // ⭐ id 필수
       title,
       period,
     };
 
     contests.push(newContest);
-
     await kv.set(CONTESTS_KEY, contests);
 
     return NextResponse.json(newContest);
   } catch (e) {
-    return NextResponse.json({ error: "추가 실패" }, { status: 500 });
+    return NextResponse.json({ error: "POST 실패" }, { status: 500 });
   }
 }
 
 /**
- * 공모전 삭제 (관리자)
- * body: { id: number }
+ * 공모전 삭제 ⭐ 핵심
  */
 export async function DELETE(req: Request) {
   try {
-    const { id } = await req.json();
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id");
 
     if (!id) {
       return NextResponse.json(
-        { error: "삭제할 공모전 ID가 없습니다." },
+        { error: "id 없음" },
         { status: 400 }
       );
     }
 
-    const contests: any[] = (await kv.get(CONTESTS_KEY)) || [];
+    const contests = (await kv.get<any[]>(CONTESTS_KEY)) || [];
 
     const filtered = contests.filter((c) => c.id !== id);
 
@@ -67,6 +70,6 @@ export async function DELETE(req: Request) {
 
     return NextResponse.json({ success: true });
   } catch (e) {
-    return NextResponse.json({ error: "삭제 실패" }, { status: 500 });
+    return NextResponse.json({ error: "DELETE 실패" }, { status: 500 });
   }
 }
